@@ -51,32 +51,32 @@ function MainLayout() {
   ]
 
   const mobileMenu = [
-    {
-      label: "Accueil",
-      path: "/",
-      icon: Home,
-    },
-    {
-      label: "Commandes",
-      path: "/commandes",
-      icon: ShoppingCart,
-    },
-    {
-      label: "Produits",
-      path: "/produits",
-      icon: Package,
-    },
-    {
-      label: "Statistiques",
-      path: "/statistiques",
-      icon: BarChart3,
-    },
-    {
-      label: "Profil",
-      path: "/profil",
-      icon: User,
-    },
-  ]
+  {
+    label: "Accueil",
+    path: "/",
+    icon: Home,
+  },
+  {
+    label: "Commandes",
+    path: "/commandes",
+    icon: ShoppingCart,
+  },
+  {
+    label: "Produits",
+    path: "/produits",
+    icon: Package,
+  },
+  {
+    label: "Fournisseurs",
+    path: "/fournisseurs",
+    icon: Building2,
+  },
+  {
+    label: "Statistiques",
+    path: "/statistiques",
+    icon: BarChart3,
+  },
+]
 
   return (
     <div className="min-h-screen bg-background">
