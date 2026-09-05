@@ -142,7 +142,7 @@ function MainLayout() {
 
               <div>
                 <p className="text-sm font-semibold text-white">
-                  Utilisateur
+                  Mame Diarra
                 </p>
 
                 <p className="text-xs text-white/60">

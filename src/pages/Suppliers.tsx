@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react"
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react"
+
 import {
   Plus,
   Search,
@@ -7,6 +13,8 @@ import {
   MapPin,
   Trash2,
   X,
+  Pencil,
+  Users,
 } from "lucide-react"
 
 import { supabase } from "../lib/supabase"
@@ -21,23 +29,34 @@ type Supplier = {
   created_at: string
 }
 
+const emptyForm = {
+  first_name: "",
+  last_name: "",
+  phone: "",
+  email: "",
+  address: "",
+}
+
 function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [search, setSearch] = useState("")
 
-  const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    phone: "",
-    email: "",
-    address: "",
-  })
+  const [showForm, setShowForm] = useState(false)
+  const [editingSupplier, setEditingSupplier] =
+    useState<Supplier | null>(null)
+
+  const [search, setSearch] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const [form, setForm] = useState(emptyForm)
 
   useEffect(() => {
     fetchSuppliers()
   }, [])
+
+  // =====================================================
+  // RÉCUPÉRER LES FOURNISSEURS
+  // =====================================================
 
   async function fetchSuppliers() {
     setLoading(true)
@@ -48,7 +67,7 @@ function Suppliers() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error(error)
+      console.error("Erreur récupération fournisseurs :", error)
       setLoading(false)
       return
     }
@@ -57,8 +76,12 @@ function Suppliers() {
     setLoading(false)
   }
 
+  // =====================================================
+  // CHANGEMENT DES CHAMPS
+  // =====================================================
+
   function handleChange(
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) {
     setForm({
       ...form,
@@ -66,365 +89,656 @@ function Suppliers() {
     })
   }
 
-  async function handleSubmit(
-    event: React.FormEvent
-  ) {
+  // =====================================================
+  // OUVRIR LE FORMULAIRE POUR AJOUTER
+  // =====================================================
+
+  function openAddForm() {
+    setEditingSupplier(null)
+    setForm(emptyForm)
+    setShowForm(true)
+  }
+
+  // =====================================================
+  // OUVRIR LE FORMULAIRE POUR MODIFIER
+  // =====================================================
+
+  function openEditForm(supplier: Supplier) {
+    setEditingSupplier(supplier)
+
+    setForm({
+      first_name: supplier.first_name,
+      last_name: supplier.last_name,
+      phone: supplier.phone || "",
+      email: supplier.email || "",
+      address: supplier.address || "",
+    })
+
+    setShowForm(true)
+  }
+
+  // =====================================================
+  // FERMER LE FORMULAIRE
+  // =====================================================
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingSupplier(null)
+    setForm(emptyForm)
+  }
+
+  // =====================================================
+  // AJOUT / MODIFICATION
+  // =====================================================
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
 
     if (!form.first_name || !form.last_name) {
       return
     }
 
-    const { error } = await supabase
-      .from("suppliers")
-      .insert([form])
+    setSaving(true)
 
-    if (error) {
-      console.error(error)
-      return
+    // MODIFICATION
+    if (editingSupplier) {
+      const { error } = await supabase
+        .from("suppliers")
+        .update({
+          first_name: form.first_name,
+          last_name: form.last_name,
+          phone: form.phone || null,
+          email: form.email || null,
+          address: form.address || null,
+        })
+        .eq("id", editingSupplier.id)
+
+      if (error) {
+        console.error("Erreur modification :", error)
+        setSaving(false)
+        return
+      }
     }
 
-    setForm({
-      first_name: "",
-      last_name: "",
-      phone: "",
-      email: "",
-      address: "",
-    })
+    // AJOUT
+    else {
+      const { error } = await supabase
+        .from("suppliers")
+        .insert([
+          {
+            first_name: form.first_name,
+            last_name: form.last_name,
+            phone: form.phone || null,
+            email: form.email || null,
+            address: form.address || null,
+          },
+        ])
 
-    setShowForm(false)
+      if (error) {
+        console.error("Erreur ajout :", error)
+        setSaving(false)
+        return
+      }
+    }
 
+    setSaving(false)
+
+    closeForm()
     fetchSuppliers()
   }
 
+  // =====================================================
+  // SUPPRIMER
+  // =====================================================
+
   async function deleteSupplier(id: number) {
+    const confirmed = window.confirm(
+      "Voulez-vous vraiment supprimer ce fournisseur ?"
+    )
+
+    if (!confirmed) {
+      return
+    }
+
     const { error } = await supabase
       .from("suppliers")
       .delete()
       .eq("id", id)
 
     if (error) {
-      console.error(error)
+      console.error("Erreur suppression :", error)
       return
     }
 
     fetchSuppliers()
   }
 
-  const filteredSuppliers = suppliers.filter((supplier) => {
-    const fullName =
-      `${supplier.first_name} ${supplier.last_name}`.toLowerCase()
+  // =====================================================
+  // RECHERCHE
+  // =====================================================
 
-    return fullName.includes(search.toLowerCase())
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    const text = `
+      ${supplier.first_name}
+      ${supplier.last_name}
+      ${supplier.phone || ""}
+      ${supplier.email || ""}
+      ${supplier.address || ""}
+    `.toLowerCase()
+
+    return text.includes(search.toLowerCase())
   })
 
+  // =====================================================
+  // AFFICHAGE
+  // =====================================================
+
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-background">
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* =================================================
+          HEADER
+          ================================================= */}
 
-        <div>
-          <h1 className="text-2xl font-bold text-navy md:text-3xl">
-            Fournisseurs
-          </h1>
+      <div className="px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
 
-          <p className="mt-1 text-sm text-text-secondary">
-            Gérez vos fournisseurs alimentaires
-          </p>
+        <div className="flex items-start justify-between gap-3">
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-navy">
+              Fournisseurs
+            </h1>
+
+            <p className="mt-1 text-sm text-text-secondary">
+              Gérez vos fournisseurs alimentaires
+            </p>
+          </div>
+
+          {/* Nombre de fournisseurs */}
+          <div
+            className="
+              flex
+              h-10
+              min-w-10
+              items-center
+              justify-center
+              rounded-full
+              bg-primary/10
+              px-3
+              text-sm
+              font-bold
+              text-primary
+            "
+          >
+            {suppliers.length}
+          </div>
+
         </div>
 
-        <button
-          onClick={() => setShowForm(true)}
-          className="
-            flex
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            bg-primary
-            px-4
-            py-3
-            text-sm
-            font-semibold
-            text-white
-            shadow-sm
-            transition
-            hover:bg-primary/90
-          "
-        >
-          <Plus size={19} />
-
-          Ajouter un fournisseur
-        </button>
-
       </div>
 
 
-      {/* Recherche */}
-      <div className="relative">
+      {/* =================================================
+          CONTENU
+          ================================================= */}
 
-        <Search
-          size={19}
-          className="
-            absolute
-            left-4
-            top-1/2
-            -translate-y-1/2
-            text-gray-400
-          "
-        />
+      <div className="space-y-4 px-4 pb-32 sm:px-6">
 
-        <input
-          type="text"
-          placeholder="Rechercher un fournisseur..."
-          value={search}
-          onChange={(event) =>
-            setSearch(event.target.value)
-          }
-          className="
-            w-full
-            rounded-xl
-            border
-            border-gray-200
-            bg-white
-            py-3
-            pl-11
-            pr-4
-            text-sm
-            outline-none
-            transition
-            focus:border-primary
-            focus:ring-2
-            focus:ring-primary/10
-          "
-        />
+        {/* Recherche */}
 
-      </div>
+        <div className="relative">
+
+          <Search
+            size={19}
+            className="
+              absolute
+              left-4
+              top-1/2
+              -translate-y-1/2
+              text-gray-400
+            "
+          />
+
+          <input
+            type="text"
+            placeholder="Rechercher un fournisseur..."
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            className="
+              w-full
+              rounded-2xl
+              border
+              border-gray-200
+              bg-white
+              py-3.5
+              pl-11
+              pr-4
+              text-sm
+              shadow-sm
+              outline-none
+              transition
+              placeholder:text-gray-400
+              focus:border-primary
+              focus:ring-2
+              focus:ring-primary/10
+            "
+          />
+
+        </div>
 
 
-      {/* Liste */}
-      <div className="grid gap-4 lg:grid-cols-2">
+        {/* =================================================
+            LISTE
+            ================================================= */}
 
         {loading ? (
 
-          <div className="rounded-2xl bg-white p-8 text-center text-gray-500">
+          <div
+            className="
+              rounded-2xl
+              bg-white
+              p-8
+              text-center
+              text-sm
+              text-text-secondary
+              shadow-sm
+            "
+          >
             Chargement des fournisseurs...
           </div>
 
         ) : filteredSuppliers.length === 0 ? (
 
-          <div className="rounded-2xl bg-white p-8 text-center lg:col-span-2">
+          <div
+            className="
+              rounded-2xl
+              border
+              border-dashed
+              border-gray-200
+              bg-white
+              px-5
+              py-10
+              text-center
+            "
+          >
 
-            <p className="font-semibold text-navy">
-              Aucun fournisseur
+            <div
+              className="
+                mx-auto
+                flex
+                h-14
+                w-14
+                items-center
+                justify-center
+                rounded-full
+                bg-primary/10
+                text-primary
+              "
+            >
+              <Users size={25} />
+            </div>
+
+            <p className="mt-4 font-semibold text-navy">
+              {search
+                ? "Aucun résultat"
+                : "Aucun fournisseur"}
             </p>
 
             <p className="mt-1 text-sm text-text-secondary">
-              Ajoutez votre premier fournisseur.
+              {search
+                ? "Essayez avec un autre nom."
+                : "Ajoutez votre premier fournisseur."}
             </p>
 
           </div>
 
         ) : (
 
-          filteredSuppliers.map((supplier) => (
+          <div className="grid gap-3 lg:grid-cols-2">
 
-            <div
-              key={supplier.id}
-              className="
-                rounded-2xl
-                bg-white
-                p-5
-                shadow-sm
-              "
-            >
+            {filteredSuppliers.map((supplier) => (
 
-              <div className="flex items-start justify-between">
+              <div
+                key={supplier.id}
+                className="
+                  rounded-2xl
+                  border
+                  border-gray-100
+                  bg-white
+                  p-4
+                  shadow-sm
+                  transition
+                  hover:shadow-md
+                "
+              >
 
-                <div className="flex items-center gap-3">
+                {/* En-tête carte */}
 
-                  <div
-                    className="
-                      flex
-                      h-12
-                      w-12
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-full
-                      bg-primary/10
-                      font-bold
-                      text-primary
-                    "
-                  >
-                    {supplier.first_name.charAt(0)}
-                    {supplier.last_name.charAt(0)}
+                <div className="flex items-center justify-between">
+
+                  <div className="flex min-w-0 items-center gap-3">
+
+                    {/* Initiales */}
+
+                    <div
+                      className="
+                        flex
+                        h-12
+                        w-12
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-2xl
+                        bg-primary/10
+                        text-sm
+                        font-bold
+                        text-primary
+                      "
+                    >
+                      {supplier.first_name.charAt(0)}
+                      {supplier.last_name.charAt(0)}
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <h2 className="truncate font-bold text-navy">
+                        {supplier.first_name}{" "}
+                        {supplier.last_name}
+                      </h2>
+
+                      <p className="mt-0.5 text-xs text-text-secondary">
+                        Fournisseur
+                      </p>
+
+                    </div>
+
                   </div>
 
-                  <div>
+                  {/* Actions */}
 
-                    <h2 className="font-bold text-navy">
-                      {supplier.first_name}{" "}
-                      {supplier.last_name}
-                    </h2>
+                  <div className="flex shrink-0 items-center gap-1">
 
-                    <p className="text-xs text-text-secondary">
-                      Fournisseur
-                    </p>
+                    <button
+                      onClick={() =>
+                        openEditForm(supplier)
+                      }
+                      className="
+                        flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-primary/10
+                        text-primary
+                        transition
+                        hover:bg-primary/20
+                      "
+                      aria-label="Modifier"
+                      title="Modifier"
+                    >
+                      <Pencil size={17} />
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        deleteSupplier(supplier.id)
+                      }
+                      className="
+                        flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-red-50
+                        text-red-500
+                        transition
+                        hover:bg-red-100
+                      "
+                      aria-label="Supprimer"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={17} />
+                    </button>
 
                   </div>
 
                 </div>
 
 
-                <button
-                  onClick={() =>
-                    deleteSupplier(supplier.id)
-                  }
-                  className="
-                    rounded-lg
-                    p-2
-                    text-gray-400
-                    transition
-                    hover:bg-red-50
-                    hover:text-red-500
-                  "
-                  aria-label="Supprimer"
-                >
-                  <Trash2 size={18} />
-                </button>
+                {/* Informations */}
+
+                <div className="mt-4 space-y-2.5">
+
+                  {supplier.phone && (
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-secondary/10
+                        "
+                      >
+                        <Phone
+                          size={15}
+                          className="text-secondary"
+                        />
+                      </div>
+
+                      <span className="truncate">
+                        {supplier.phone}
+                      </span>
+
+                    </div>
+                  )}
+
+
+                  {supplier.email && (
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-secondary/10
+                        "
+                      >
+                        <Mail
+                          size={15}
+                          className="text-secondary"
+                        />
+                      </div>
+
+                      <span className="truncate">
+                        {supplier.email}
+                      </span>
+
+                    </div>
+                  )}
+
+
+                  {supplier.address && (
+                    <div className="flex items-start gap-3 text-sm text-gray-600">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-secondary/10
+                        "
+                      >
+                        <MapPin
+                          size={15}
+                          className="text-secondary"
+                        />
+                      </div>
+
+                      <span>
+                        {supplier.address}
+                      </span>
+
+                    </div>
+                  )}
+
+                </div>
 
               </div>
 
+            ))}
 
-              <div className="mt-5 space-y-3">
-
-                {supplier.phone && (
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-
-                    <Phone
-                      size={17}
-                      className="text-secondary"
-                    />
-
-                    <span>
-                      {supplier.phone}
-                    </span>
-
-                  </div>
-                )}
-
-
-                {supplier.email && (
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-
-                    <Mail
-                      size={17}
-                      className="text-secondary"
-                    />
-
-                    <span className="break-all">
-                      {supplier.email}
-                    </span>
-
-                  </div>
-                )}
-
-
-                {supplier.address && (
-                  <div className="flex items-start gap-3 text-sm text-gray-600">
-
-                    <MapPin
-                      size={17}
-                      className="mt-0.5 shrink-0 text-secondary"
-                    />
-
-                    <span>
-                      {supplier.address}
-                    </span>
-
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-
-          ))
+          </div>
 
         )}
 
       </div>
 
 
-      {/* =====================================================
+      {/* =================================================
+          BOUTON AJOUTER MOBILE
+          ================================================= */}
+
+      <button
+        onClick={openAddForm}
+        className="
+          fixed
+          bottom-30
+          right-4
+          z-40
+          flex
+          h-14
+          w-14
+          items-center
+          justify-center
+          rounded-full
+          bg-primary
+          text-white
+          shadow-lg
+          shadow-primary/25
+          transition
+          hover:scale-105
+          hover:bg-primary/90
+          sm:bottom-6
+          sm:right-6
+          sm:h-auto
+          sm:w-auto
+          sm:rounded-xl
+          sm:px-5
+          sm:py-3
+        "
+        aria-label="Ajouter un fournisseur"
+      >
+
+        <Plus size={23} />
+
+        <span className="ml-2 hidden text-sm font-semibold sm:inline">
+          Ajouter un fournisseur
+        </span>
+
+      </button>
+
+
+      {/* =================================================
           FORMULAIRE
-          ===================================================== */}
+          ================================================= */}
 
       {showForm && (
 
-        <div
-          className="
-            fixed
-            inset-0
-            z-50
-            flex
-            items-end
-            justify-center
-            bg-black/40
-            p-0
-            sm:items-center
-            sm:p-4
-          "
-        >
+       <div
+    className="
+      fixed
+      inset-0
+      z-[80]
+      flex
+      items-end
+      justify-center
+      bg-black/40
+      p-0
+      backdrop-blur-[2px]
+      sm:items-center
+      sm:p-4
+    "
+  >
 
           <div
             className="
-              max-h-[90vh]
+              max-h-[92vh]
               w-full
               overflow-y-auto
               rounded-t-3xl
               bg-white
-              p-6
+              p-5
+              shadow-2xl
               sm:max-w-lg
               sm:rounded-3xl
+              sm:p-6
             "
           >
 
             {/* Form header */}
-            <div className="mb-6 flex items-center justify-between">
+
+            <div className="mb-5 flex items-start justify-between gap-4">
 
               <div>
+
                 <h2 className="text-xl font-bold text-navy">
-                  Ajouter un fournisseur
+                  {editingSupplier
+                    ? "Modifier le fournisseur"
+                    : "Ajouter un fournisseur"}
                 </h2>
 
                 <p className="mt-1 text-sm text-text-secondary">
-                  Renseignez les informations du fournisseur.
+                  {editingSupplier
+                    ? "Modifiez les informations du fournisseur."
+                    : "Renseignez les informations du fournisseur."}
                 </p>
+
               </div>
 
               <button
                 type="button"
-                aria-label="Fermer le formulaire"
-                title="Fermer le formulaire"
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="
+                  flex
+                  h-9
+                  w-9
+                  shrink-0
+                  items-center
+                  justify-center
                   rounded-full
                   bg-gray-100
-                  p-2
                   text-gray-500
+                  transition
                   hover:bg-gray-200
                 "
+                aria-label="Fermer"
               >
-                <X size={20} />
+                <X size={19} />
               </button>
 
             </div>
 
 
             {/* Formulaire */}
+
             <form
               onSubmit={handleSubmit}
               className="space-y-4"
@@ -433,7 +747,8 @@ function Suppliers() {
               <div className="grid gap-4 sm:grid-cols-2">
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-navy">
+
+                  <label className="mb-1.5 block text-sm font-medium text-navy">
                     Prénom *
                   </label>
 
@@ -447,6 +762,7 @@ function Suppliers() {
                       rounded-xl
                       border
                       border-gray-200
+                      bg-white
                       px-4
                       py-3
                       text-sm
@@ -456,11 +772,13 @@ function Suppliers() {
                       focus:ring-primary/10
                     "
                   />
+
                 </div>
 
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-navy">
+
+                  <label className="mb-1.5 block text-sm font-medium text-navy">
                     Nom *
                   </label>
 
@@ -474,6 +792,7 @@ function Suppliers() {
                       rounded-xl
                       border
                       border-gray-200
+                      bg-white
                       px-4
                       py-3
                       text-sm
@@ -483,13 +802,15 @@ function Suppliers() {
                       focus:ring-primary/10
                     "
                   />
+
                 </div>
 
               </div>
 
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">
+
+                <label className="mb-1.5 block text-sm font-medium text-navy">
                   Téléphone
                 </label>
 
@@ -498,7 +819,7 @@ function Suppliers() {
                   type="tel"
                   value={form.phone}
                   onChange={handleChange}
-                  placeholder="+221 ..."
+                  placeholder="Numéro de téléphone"
                   className="
                     w-full
                     rounded-xl
@@ -513,11 +834,13 @@ function Suppliers() {
                     focus:ring-primary/10
                   "
                 />
+
               </div>
 
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">
+
+                <label className="mb-1.5 block text-sm font-medium text-navy">
                   Email
                 </label>
 
@@ -541,11 +864,13 @@ function Suppliers() {
                     focus:ring-primary/10
                   "
                 />
+
               </div>
 
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">
+
+                <label className="mb-1.5 block text-sm font-medium text-navy">
                   Adresse
                 </label>
 
@@ -568,16 +893,19 @@ function Suppliers() {
                     focus:ring-primary/10
                   "
                 />
+
               </div>
 
 
               {/* Boutons */}
-              <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
 
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={closeForm}
                   className="
+                    order-2
                     rounded-xl
                     border
                     border-gray-200
@@ -587,6 +915,7 @@ function Suppliers() {
                     font-semibold
                     text-gray-600
                     hover:bg-gray-50
+                    sm:order-1
                   "
                 >
                   Annuler
@@ -594,7 +923,9 @@ function Suppliers() {
 
                 <button
                   type="submit"
+                  disabled={saving}
                   className="
+                    order-1
                     rounded-xl
                     bg-primary
                     px-5
@@ -602,10 +933,18 @@ function Suppliers() {
                     text-sm
                     font-semibold
                     text-white
+                    transition
                     hover:bg-primary/90
+                    disabled:cursor-not-allowed
+                    disabled:opacity-60
+                    sm:order-2
                   "
                 >
-                  Enregistrer
+                  {saving
+                    ? "Enregistrement..."
+                    : editingSupplier
+                      ? "Enregistrer les modifications"
+                      : "Enregistrer"}
                 </button>
 
               </div>
